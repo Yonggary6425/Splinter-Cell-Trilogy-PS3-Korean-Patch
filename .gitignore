@@ -1,0 +1,7 @@
+*.iso
+*.ISO
+build/
+data.pack
+*.orig
+*.self
+*.elf

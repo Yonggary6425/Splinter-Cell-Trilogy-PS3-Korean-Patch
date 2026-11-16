@@ -4,7 +4,7 @@ Tom Clancy's Splinter Cell Trilogy (PS3, BLUS30761) 한글패치 첫 정식판�
 
 ## 다운로드
 
-- `SCT_KO_Patcher_v1.0.zip` 하나만 받으면 됩니다. 패처 2종이 들어 있습니다.
+- [`SCT_KO_Patcher_v1.0.zip`](https://github.com/Yonggary6425/Splinter-Cell-Trilogy-PS3-Korean-Patch/raw/main/release/SCT_KO_Patcher_v1.0.zip) 하나만 받으면 됩니다. 패처 2종이 들어 있습니다.
   - `SCT_KO_Patcher_RPCS3.exe`: RPCS3용 (권장, 복호화 필요 없음)
   - `SCT_KO_Patcher_ELF.exe`: 실행 파일 패치 방식 (RPCS3, PS3 실기)
 - 원본 ISO나 게임 폴더를 지정하고 **[설치]**를 누르세요.

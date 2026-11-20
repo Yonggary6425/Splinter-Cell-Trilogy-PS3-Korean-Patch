@@ -26,7 +26,7 @@
 
 ## 패처 2종
 
-**[SCT_KO_Patcher_v1.0.zip 내려받기](https://github.com/Yonggary6425/Splinter-Cell-Trilogy-PS3-Korean-Patch/raw/main/release/SCT_KO_Patcher_v1.0.zip)** (`release` 폴더) 후 압축을 풉니다. 둘 중 하나만 쓰면 됩니다.
+[Releases](../../releases)에서 `SCT_KO_Patcher_v1.0.zip`을 받아 압축을 풉니다. 둘 중 하나만 쓰면 됩니다.
 
 | 파일 | 대상 | 설명 |
 |---|---|---|
@@ -41,15 +41,15 @@
 2. **게임 폴더 / ISO**에 원본 ISO 또는 게임 폴더(`PS3_GAME`이 들어 있는 폴더)를 지정합니다.
 3. **RPCS3 폴더**에 `rpcs3.exe`가 있는 폴더를 지정합니다.
 4. 원하면 **동영상에 한글 자막 입히기**를 켭니다. (PC에 따라 1~2시간)
-5. **[설치]**를 누릅니다.
+5. **[설치]** 버튼을 누릅니다.
 6. RPCS3 **Manage → Game Patches**에서 "Korean patch (SC1/SC2/SC3)"가 켜져 있는지 확인하고 게임을 실행합니다.
 
 ### 실행 파일 패치 방식 (`SCT_KO_Patcher_ELF.exe`)
 
-1. ISO 설치라면 **[ISO에서 실행 파일 꺼내기]**를 누릅니다. ISO 옆 `이름_SELF` 폴더에 `sc1/sc2/sc3.ppu.self`가 생깁니다.
+1. ISO 설치라면 **[ISO에서 실행 파일 꺼내기]** 버튼을 누릅니다. ISO 옆 `이름_SELF` 폴더에 `sc1/sc2/sc3.ppu.self`가 생깁니다.
    폴더 설치라면 게임 폴더의 `Data_SC\sc1.ppu.self`, `Data_SCPT\sc2.ppu.self`, `Data_SCCT\sc3.ppu.self`를 그대로 씁니다.
 2. RPCS3 **Utilities → Decrypt PS3 Binaries**에서 위 `.self` 3개를 선택합니다. 같은 폴더에 `.elf`가 만들어집니다.
-3. 패처에서 **[설치]**를 누릅니다.
+3. 패처에서 **[설치]** 버튼을 누릅니다.
 
 ### PS3 실기
 

@@ -51,7 +51,7 @@ ISO 파일과 게임 폴더 모두에 설치할 수 있는 Windows용 한글 패
 
 PS3 실행 파일은 암호화되어 있어서, 사용자의 RPCS3로 먼저 복호화해야 합니다.
 
-1. **ISO 설치**: ISO를 지정하고 **[ISO에서 실행 파일 꺼내기]**를 누르세요. ISO 옆에 `이름_SELF` 폴더가 생기고 `sc1/sc2/sc3.ppu.self`가 들어갑니다.
+1. **ISO 설치**: ISO를 지정하고 **[ISO에서 실행 파일 꺼내기]** 버튼을 누르세요. ISO 옆에 `이름_SELF` 폴더가 생기고 `sc1/sc2/sc3.ppu.self`가 들어갑니다.
    **폴더 설치**: 게임 폴더의 `Data_SC\sc1.ppu.self`, `Data_SCPT\sc2.ppu.self`, `Data_SCCT\sc3.ppu.self`를 그대로 사용합니다.
 2. RPCS3 메뉴 **Utilities → Decrypt PS3 Binaries**에서 위의 `.self` 3개를 선택합니다. 같은 폴더에 `.elf`가 만들어집니다.
 3. **ISO 설치**: `이름_SELF` 폴더는 자동으로 찾습니다. 다른 곳에 두었다면 "복호화 ELF 폴더"로 지정하세요.

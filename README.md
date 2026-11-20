@@ -26,7 +26,7 @@
 
 ## 패처 2종
 
-**[SCT_KO_Patcher_v1.0.zip 내려받기](https://github.com/Yonggary6425/Splinter-Cell-Trilogy-PS3-Korean-Patch/raw/main/release/SCT_KO_Patcher_v1.0.zip)** (`release` 폴더) 후 압축을 풉니다. 둘 중 하나만 쓰면 됩니다.
+**[SCT_KO_Patcher_v1.1.zip 내려받기](https://github.com/Yonggary6425/Splinter-Cell-Trilogy-PS3-Korean-Patch/raw/main/release/SCT_KO_Patcher_v1.1.zip)** (`release` 폴더) 후 압축을 풉니다. 둘 중 하나만 쓰면 됩니다.
 
 | 파일 | 대상 | 설명 |
 |---|---|---|
@@ -73,7 +73,7 @@
 ## 구성
 
 ```
-release/          배포 파일 (SCT_KO_Patcher_v1.0.zip)
+release/          배포 파일 (SCT_KO_Patcher_v1.1.zip)
 patcher-src/      패처 소스 (C#, PowerShell 빌드 스크립트)
 credit/           타이틀 화면 크레딧 문구 도구
 README.md / RELEASE_NOTES.md / NOTICE.md

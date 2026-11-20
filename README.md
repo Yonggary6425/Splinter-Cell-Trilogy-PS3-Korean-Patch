@@ -12,7 +12,7 @@
 
 - **1·2·3편 영어 텍스트 한글화**: 메뉴, 임무 목표, 데이터·노트, 대화 자막, 로딩 화면
 - **게임 중 음성 자막**: 원본에 자막이 없던 대사에도 한글 자막을 넣었습니다. 1편의 긴 통화 장면은 음성에 맞춰 나눠서 나옵니다.
-- **컷신 동영상 자막 (선택)**: 컷신 영상 52개에 한글 자막을 입힐 수 있습니다. 필요한 도구는 패처가 자동으로 받고, 끝나면 지웁니다.
+- **컷신 동영상 자막 (선택)**: 오프닝을 포함한 동영상 55개에 한글 자막을 입힐 수 있습니다. 필요한 도구는 패처가 자동으로 받고, 끝나면 지웁니다.
 - **ISO와 게임 폴더 모두 설치**: ISO는 원본을 두고 `원본이름_KOR.iso`를 새로 만들고, 폴더는 원본을 `.orig`로 보관합니다.
 - **되돌리기 지원**: 폴더 설치는 버튼 하나로 원본으로 돌아갑니다.
 - **RPCS3 설치 데이터 함께 패치**: 이미 게임을 실행해 `dev_hdd0`에 설치된 데이터도 같이 바꿉니다.
@@ -26,7 +26,7 @@
 
 ## 패처 2종
 
-**[SCT_KO_Patcher_v1.1.zip 내려받기](https://github.com/Yonggary6425/Splinter-Cell-Trilogy-PS3-Korean-Patch/raw/main/release/SCT_KO_Patcher_v1.1.zip)** (`release` 폴더) 후 압축을 풉니다. 둘 중 하나만 쓰면 됩니다.
+**[SCT_KO_Patcher_v1.0.zip 내려받기](https://github.com/Yonggary6425/Splinter-Cell-Trilogy-PS3-Korean-Patch/raw/main/release/SCT_KO_Patcher_v1.0.zip)** (`release` 폴더) 후 압축을 풉니다. 둘 중 하나만 쓰면 됩니다.
 
 | 파일 | 대상 | 설명 |
 |---|---|---|
@@ -73,7 +73,7 @@
 ## 구성
 
 ```
-release/          배포 파일 (SCT_KO_Patcher_v1.1.zip)
+release/          배포 파일 (SCT_KO_Patcher_v1.0.zip)
 patcher-src/      패처 소스 (C#, PowerShell 빌드 스크립트)
 credit/           타이틀 화면 크레딧 문구 도구
 README.md / RELEASE_NOTES.md / NOTICE.md

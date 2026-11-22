@@ -25,7 +25,7 @@ static class Core
     public const string Title = "스플린터 셀 트릴로지 한글 패처 (BLUS30761) - RPCS3 게임 패치 방식";
 #else
     public const bool Yml = false;
-    public const string Title = "스플린터 셀 트릴로지 한글 패처 (BLUS30761) - 실행 파일 패치 방식";
+    public const string Title = "스플린터 셀 트릴로지 한글 패처 v1.2 (BLUS30761)";
 #endif
     public const string Manifest = "KO_PATCH_FILES.txt";
     public static Action<string> Log = delegate { };
@@ -59,11 +59,31 @@ static class Core
     }
     public static bool IsIso(string p) { return !string.IsNullOrEmpty(p) && p.EndsWith(".iso", StringComparison.OrdinalIgnoreCase) && File.Exists(p); }
 
+    // Accepts the RPCS3 folder, rpcs3.exe itself, its dev_hdd0 folder, or a folder one level above it.
+    public static string Rpcs3Dir(string p)
+    {
+        if (string.IsNullOrEmpty(p)) return null;
+        p = p.Trim().Trim('"').TrimEnd('\\', '/');
+        if (File.Exists(p) && Path.GetFileName(p).Equals("rpcs3.exe", StringComparison.OrdinalIgnoreCase)) return Path.GetDirectoryName(p);
+        if (!Directory.Exists(p)) throw new Exception("RPCS3 폴더를 찾을 수 없습니다: " + p);
+        if (File.Exists(Path.Combine(p, "rpcs3.exe"))) return p;
+        if (Path.GetFileName(p).Equals("dev_hdd0", StringComparison.OrdinalIgnoreCase))
+        {
+            var up = Path.GetDirectoryName(p); if (up != null && File.Exists(Path.Combine(up, "rpcs3.exe"))) return up;
+        }
+        try
+        {
+            var subs = Directory.GetDirectories(p).Where(d => File.Exists(Path.Combine(d, "rpcs3.exe"))).ToList();
+            if (subs.Count == 1) { Core.Log("RPCS3 폴더: " + subs[0]); return subs[0]; }
+        }
+        catch { }
+        throw new Exception("RPCS3 폴더가 아닙니다 (rpcs3.exe가 없음): " + p + "\r\nrpcs3.exe가 바로 들어 있는 폴더를 지정해 주세요.");
+    }
+
     // RPCS3 keeps an installed copy of the game data that the game reads instead of the disc.
     public static string HddUsr(string rpcs3)
     {
-        if (string.IsNullOrEmpty(rpcs3)) return null;
-        if (!Directory.Exists(rpcs3)) throw new Exception("RPCS3 폴더를 찾을 수 없습니다: " + rpcs3);
+        rpcs3 = Rpcs3Dir(rpcs3); if (rpcs3 == null) return null;
         var hdd = new List<string> { Path.Combine(rpcs3, "dev_hdd0") };
         var vfs = Path.Combine(rpcs3, "config", "vfs.yml"); if (!File.Exists(vfs)) vfs = Path.Combine(rpcs3, "vfs.yml");
         if (File.Exists(vfs))
@@ -72,8 +92,17 @@ static class Core
             if (m.Success) { var v = m.Groups[1].Value.Trim('"', '\''); v = v.Replace("$(EmulatorDir)", rpcs3.TrimEnd('\\', '/') + "/"); hdd.Insert(0, v); }
         }
         foreach (var h in hdd) { var u = Path.Combine(h, "game", "BLUS30761DATA", "USRDIR"); if (Directory.Exists(u)) return u; }
-        if (!File.Exists(Path.Combine(rpcs3, "rpcs3.exe"))) throw new Exception("RPCS3 폴더가 아닙니다 (rpcs3.exe 없음): " + rpcs3);
         return null;
+    }
+
+    // Shown at the end of an install so that new files (such as the added subtitle files) also reach RPCS3's installed copy.
+    public static void HddNotice(string rpcs3, string hdd, bool realPs3)
+    {
+        if (realPs3) return;
+        if (string.IsNullOrEmpty(rpcs3))
+            Core.Log("\r\n※ RPCS3 폴더를 지정하지 않았습니다. RPCS3에서 이 게임을 실행한 적이 있다면,\r\n   RPCS3 폴더를 지정해 패처를 한 번 더 실행해 주세요. (안 하면 일부 자막이 나오지 않습니다)");
+        else if (hdd == null)
+            Core.Log("\r\n※ 중요: RPCS3에 아직 이 게임의 데이터가 설치되어 있지 않습니다.\r\n   1) 게임을 한 번 실행해 타이틀 화면까지 간 뒤 종료하고\r\n   2) 패처를 같은 설정으로 한 번 더 실행해 주세요.\r\n   (게임이 처음 실행될 때 만드는 설치 데이터에는 추가 자막 파일이 복사되지 않습니다. 두 번째 실행에서 넣습니다)");
     }
 }
 
@@ -451,13 +480,16 @@ static class Rpcs3Patch
     }
     public static void Uninstall(string rpcs3)
     {
+        try { rpcs3 = Core.Rpcs3Dir(rpcs3); } catch { return; }
         if (string.IsNullOrEmpty(rpcs3)) return;
+        bool removed = false;
         foreach (var f in new[] { Path.Combine(rpcs3, "patches", File_), Path.Combine(rpcs3, "config", "patch_config.yml") })
         {
             if (!File.Exists(f)) continue; var t = File.ReadAllText(f).Replace("\r\n", "\n"); if (!t.Contains(Begin)) continue;
             var r = Strip(t); if (f.EndsWith(File_) && r.Replace("Version: 1.2", "").Trim().Length == 0) File.Delete(f); else File.WriteAllText(f, r, new UTF8Encoding(false));
+            removed = true;
         }
-        Core.Log("RPCS3 게임 패치 제거 완료");
+        if (removed) Core.Log("RPCS3 게임 패치(이전 RPCS3 방식 한글 패치) 제거 완료");
     }
 }
 
@@ -572,7 +604,9 @@ static class Installer
         {
             var f = Path.Combine(usr, Core.Disk(it.Rel)); return File.Exists(f + ".orig") ? f + ".orig" : File.Exists(f) ? f : null;
         }, (it, file) => { var f = Path.Combine(usr, Core.Disk(it.Rel)); if (!File.Exists(f + ".orig")) File.Move(f, f + ".orig"); else File.Delete(f); File.Move(file, f); Record(usr, "M", it.Rel); }));
+        if (!Core.Yml && !o.RealPs3) Rpcs3Patch.Uninstall(o.Rpcs3);
         Core.Log("설치가 끝났습니다." + (o.RealPs3 ? "" : " RPCS3에서 게임을 실행하세요."));
+        Core.HddNotice(o.Rpcs3, hdd, o.RealPs3);
     }
 
     static void Videos(Options o, string ff, Func<Subs.Item, string> source, Action<Subs.Item, string> done)
@@ -609,6 +643,7 @@ static class Installer
         var pack = Pack.Load(); var hdd = Core.HddUsr(o.Rpcs3); var isoPath = o.Game;
         string output = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(isoPath)), Path.GetFileNameWithoutExtension(isoPath) + "_KOR.iso");
         string work = Path.Combine(Path.GetTempPath(), "SCTKO_iso_" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(work);
+        bool already = false;
         try
         {
             using (var iso = new Iso(isoPath))
@@ -616,8 +651,6 @@ static class Installer
                 Func<Iso.Node, byte[]> read = n => { var m = new MemoryStream(); iso.Copy(n, m); return m.ToArray(); };
                 Func<string, Iso.Node> node = rel => iso.Find("PS3_GAME/USRDIR/" + rel);
                 if (node("Data_SC") == null) throw new Exception("스플린터 셀 트릴로지 ISO가 아닙니다.");
-                long need = new FileInfo(isoPath).Length + (500L << 20), free = new DriveInfo(Path.GetPathRoot(output)).AvailableFreeSpace;
-                if (free < need) throw new Exception("저장 공간이 부족합니다. " + (need >> 30) + "GB 이상의 여유 공간이 필요합니다.");
                 Dictionary<int, byte[]> elfs = null; bool yml = o.Exe && Core.Yml && !o.RealPs3;
                 if (yml) Rpcs3Patch.Check(o.Rpcs3);
                 if (o.Exe && !yml) elfs = Elfs(o, new[] { Path.Combine(Path.GetDirectoryName(Path.GetFullPath(isoPath)), Path.GetFileNameWithoutExtension(isoPath) + "_SELF") },
@@ -661,22 +694,36 @@ static class Installer
                             replace(rel, Exe.FSelf(cur, kv.Value)); Core.Log("실행 파일 패치: " + rel); done++;
                         }
                 }
-                if (done == 0 && !o.Video) throw new Exception("이미 한글 패치가 적용된 ISO입니다.");
-                if (o.Video) Tools.With(o.Ffmpeg, ff => Videos(o, ff, it =>
+                if (done == 0 && !o.Video)
                 {
-                    var n = node(it.Rel); if (n == null) return null;
-                    var f = Path.Combine(work, "v" + (k++) + ".bik"); using (var s = File.Create(f)) iso.Copy(n, s); return f;
-                }, (it, file) => { var f = Path.Combine(work, "v" + (k++) + ".bik"); File.Move(file, f); var n = node(it.Rel); n.Src = f; n.Size = new FileInfo(f).Length; }));
-                Core.Log("한글 ISO 만드는 중 (몇 분 걸립니다)...");
-                iso.Write(output + ".tmp");
+                    already = true;
+                    Core.Log("이미 한글 패치가 적용된 ISO입니다. ISO는 그대로 두고 RPCS3 설치 데이터만 확인합니다: " + isoPath);
+                }
+                else
+                {
+                    long need = new FileInfo(isoPath).Length + (500L << 20), free = new DriveInfo(Path.GetPathRoot(output)).AvailableFreeSpace;
+                    if (free < need) throw new Exception("저장 공간이 부족합니다. " + (need >> 30) + "GB 이상의 여유 공간이 필요합니다.");
+                    if (o.Video) Tools.With(o.Ffmpeg, ff => Videos(o, ff, it =>
+                    {
+                        var n = node(it.Rel); if (n == null) return null;
+                        var f = Path.Combine(work, "v" + (k++) + ".bik"); using (var s = File.Create(f)) iso.Copy(n, s); return f;
+                    }, (it, file) => { var f = Path.Combine(work, "v" + (k++) + ".bik"); File.Move(file, f); var n = node(it.Rel); n.Src = f; n.Size = new FileInfo(f).Length; }));
+                    Core.Log("한글 ISO 만드는 중 (몇 분 걸립니다)...");
+                    iso.Write(output + ".tmp");
+                }
             }
-            if (File.Exists(output)) File.Delete(output);
-            File.Move(output + ".tmp", output);
+            if (!already)
+            {
+                if (File.Exists(output)) File.Delete(output);
+                File.Move(output + ".tmp", output);
+            }
         }
         finally { try { Directory.Delete(work, true); } catch { } }
-        Core.Log("한글 ISO 완성: " + output);
+        if (already) output = isoPath; else Core.Log("한글 ISO 완성: " + output);
         if (hdd != null) { Data(hdd, pack, true); Core.Log("RPCS3 설치 데이터도 패치했습니다: " + hdd); }
         if (o.Exe && Core.Yml && !o.RealPs3) Rpcs3Patch.Install(o.Rpcs3);
+        if (!Core.Yml && !o.RealPs3) Rpcs3Patch.Uninstall(o.Rpcs3);
+        Core.HddNotice(o.Rpcs3, hdd, o.RealPs3);
         return output;
     }
 
@@ -1137,7 +1184,7 @@ class MainForm : Form
         y += 32;
         pc.Left = 135; pc.Top = y; hw.Left = 280; hw.Top = y; Controls.Add(pc); Controls.Add(hw); y += 30;
         Row("RPCS3 폴더", rp, false, null);
-        Controls.Add(new Label { Text = "RPCS3에 이미 설치된 게임 데이터(dev_hdd0\\game\\BLUS30761DATA)도 함께 패치합니다.", Left = 135, Top = y - 6, AutoSize = true, ForeColor = Color.DimGray }); y += 18;
+        Controls.Add(new Label { Text = "rpcs3.exe가 있는 폴더. RPCS3에 설치된 게임 데이터(dev_hdd0\\game\\BLUS30761DATA)도 함께 패치합니다.", Left = 135, Top = y - 6, AutoSize = true, ForeColor = Color.DimGray }); y += 18;
         exe.Left = 135; exe.Top = y; Controls.Add(exe); y += 26;
         Row("복호화 ELF 폴더", elfDir, false, null);
         Controls.Add(new Label { Text = "RPCS3 [Utilities → Decrypt PS3 Binaries]로 sc1/sc2/sc3.ppu.self를 복호화한 .elf가 있는 폴더.\r\n폴더 설치는 게임 폴더 안의 .elf를 자동으로 찾습니다.", Left = 135, Top = y - 6, AutoSize = true, ForeColor = Color.DimGray }); y += 34;

@@ -54,12 +54,10 @@ if ($p.ExitCode -ne 0) { throw "패치 데이터 생성 실패 (make-pack.log �
 Write-Host "[3/3] 최종 패처 컴파일..." -ForegroundColor Cyan
 Copy-Item -LiteralPath $pack -Destination (Join-Path $src "data.pack") -Force
 try {
-    Compile (Join-Path $out "SCT_KO_Patcher_ELF.exe") @("data.pack")
-    Compile (Join-Path $out "SCT_KO_Patcher_RPCS3.exe") @("data.pack") "YMLPATCH"
+    Compile (Join-Path $out "SCT_KO_Patcher.exe") @("data.pack")
 } finally { Remove-Item (Join-Path $src "data.pack") -ErrorAction SilentlyContinue }
 Remove-Item $stage -ErrorAction SilentlyContinue
 Write-Host ""
 Write-Host "완료:" -ForegroundColor Green
-Write-Host "  $(Join-Path $out 'SCT_KO_Patcher_ELF.exe')   (실행 파일 패치 방식: RPCS3 복호화 필요)"
-Write-Host "  $(Join-Path $out 'SCT_KO_Patcher_RPCS3.exe') (RPCS3 게임 패치 방식: 복호화 불필요)"
+Write-Host "  $(Join-Path $out 'SCT_KO_Patcher.exe')   (실행 파일 패치 방식: RPCS3로 실행 파일 복호화 필요)"
 Write-Host "포함된 파일 목록: $pack.txt"

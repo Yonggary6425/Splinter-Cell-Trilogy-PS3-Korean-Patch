@@ -26,7 +26,7 @@
 
 ## 패처 2종
 
-[Releases](../../releases)에서 `SCT_KO_Patcher_v1.0.zip`을 받아 압축을 풉니다. 둘 중 하나만 쓰면 됩니다.
+[Releases](../../releases)에서 최신 `SCT_KO_Patcher_v1.1.zip`을 받아 압축을 풉니다. 둘 중 하나만 쓰면 됩니다.
 
 | 파일 | 대상 | 설명 |
 |---|---|---|
@@ -73,7 +73,7 @@
 ## 구성
 
 ```
-release/          배포 파일 (SCT_KO_Patcher_v1.0.zip)
+release/          배포 파일 (SCT_KO_Patcher_v1.1.zip)
 patcher-src/      패처 소스 (C#, PowerShell 빌드 스크립트)
 credit/           타이틀 화면 크레딧 문구 도구
 README.md / RELEASE_NOTES.md / NOTICE.md

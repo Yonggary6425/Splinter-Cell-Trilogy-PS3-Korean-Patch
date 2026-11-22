@@ -1176,7 +1176,17 @@ class MainForm : Form
     }
     public MainForm()
     {
-        Text = Core.Title; ClientSize = new Size(690, 610); FormBorderStyle = FormBorderStyle.FixedSingle; MaximizeBox = false; Font = new Font("Malgun Gothic", 9);
+        Text = Core.Title; ClientSize = new Size(690, 704); FormBorderStyle = FormBorderStyle.FixedSingle; MaximizeBox = false; Font = new Font("Malgun Gothic", 9);
+        Controls.Add(new Label
+        {
+            Text = "※ 중요 (PC/RPCS3 사용자) - 꼭 읽어 주세요\r\n" +
+                   "RPCS3에서 처음 실행하는 게임이면 아래 순서를 지켜야 추가 자막(국장실 대화 등)이 나옵니다.\r\n" +
+                   "  1) 패치 설치  →  2) RPCS3에서 게임 실행 후 타이틀 화면에서 종료  →  3) 패처 한 번 더 실행 (ISO는 _KOR.iso 지정)\r\n" +
+                   "이미 RPCS3에서 실행해 본 게임이면 RPCS3 폴더를 지정하고 한 번만 설치하면 됩니다.",
+            Left = 12, Top = y, Width = 660, Height = 80, BorderStyle = BorderStyle.FixedSingle, BackColor = Color.FromArgb(255, 248, 220), ForeColor = Color.Firebrick,
+            Font = new Font("Malgun Gothic", 9, FontStyle.Bold), Padding = new Padding(4, 4, 4, 0)
+        });
+        y += 92;
         Controls.Add(new Label { Text = "게임 폴더 / ISO", Left = 12, Top = y + 3, Width = 120 }); game.Left = 135; game.Top = y; game.Width = 405; Controls.Add(game);
         var pickFolder = new Button { Text = "폴더", Left = 547, Top = y - 1, Width = 60 }; var pickIso = new Button { Text = "ISO", Left = 612, Top = y - 1, Width = 60 }; Controls.Add(pickFolder); Controls.Add(pickIso);
         pickFolder.Click += (s, e) => { var d = new FolderBrowserDialog { Description = "PS3_GAME 폴더가 들어 있는 게임 폴더" }; if (d.ShowDialog() == DialogResult.OK) game.Text = d.SelectedPath; };
@@ -1184,7 +1194,7 @@ class MainForm : Form
         y += 32;
         pc.Left = 135; pc.Top = y; hw.Left = 280; hw.Top = y; Controls.Add(pc); Controls.Add(hw); y += 30;
         Row("RPCS3 폴더", rp, false, null);
-        Controls.Add(new Label { Text = "rpcs3.exe가 있는 폴더. RPCS3에 설치된 게임 데이터(dev_hdd0\\game\\BLUS30761DATA)도 함께 패치합니다.", Left = 135, Top = y - 6, AutoSize = true, ForeColor = Color.DimGray }); y += 18;
+        Controls.Add(new Label { Text = "rpcs3.exe가 있는 폴더. 설치된 게임 데이터(dev_hdd0\\game\\BLUS30761DATA)도 함께 패치합니다.", Left = 135, Top = y - 6, AutoSize = true, ForeColor = Color.DimGray }); y += 18;
         exe.Left = 135; exe.Top = y; Controls.Add(exe); y += 26;
         Row("복호화 ELF 폴더", elfDir, false, null);
         Controls.Add(new Label { Text = "RPCS3 [Utilities → Decrypt PS3 Binaries]로 sc1/sc2/sc3.ppu.self를 복호화한 .elf가 있는 폴더.\r\n폴더 설치는 게임 폴더 안의 .elf를 자동으로 찾습니다.", Left = 135, Top = y - 6, AutoSize = true, ForeColor = Color.DimGray }); y += 34;
@@ -1194,7 +1204,7 @@ class MainForm : Form
         Row("ffmpeg.exe", ff, true, "ffmpeg|ffmpeg.exe");
         Controls.Add(new Label { Text = "경로를 비워 두면 공식 사이트에서 임시 폴더로 자동으로 받아 쓰고, 끝나면 지웁니다.", Left = 135, Top = y - 6, AutoSize = true, ForeColor = Color.DimGray }); y += 22;
         go.Left = 135; go.Top = y; undo.Left = 255; undo.Top = y; ext.Left = 375; ext.Top = y; Controls.AddRange(new Control[] { go, undo, ext }); y += 42;
-        log.Multiline = true; log.ReadOnly = true; log.ScrollBars = ScrollBars.Vertical; log.Left = 12; log.Top = y; log.Width = 660; log.Height = 600 - y; Controls.Add(log);
+        log.Multiline = true; log.ReadOnly = true; log.ScrollBars = ScrollBars.Vertical; log.Left = 12; log.Top = y; log.Width = 660; log.Height = 694 - y; Controls.Add(log);
         Core.Log = s =>
         {
             if (IsDisposed) return; Action add = () => log.AppendText(s.Replace("\r\n", "\n").Replace("\n", "\r\n") + "\r\n");
@@ -1220,6 +1230,7 @@ class MainForm : Form
                 if (getFf && MessageBox.Show(this, Consent(), Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes) { Core.Log("취소했습니다. ffmpeg 경로를 직접 지정하거나 영상 자막 체크를 해제해 주세요."); return; }
                 o.Ffmpeg = getFf ? null : ff.Text;
             }
+            if (pc.Checked && !Confirm(o.Rpcs3)) { Core.Log("취소했습니다."); return; }
             if (Core.IsIso(o.Game)) Job(() => { Installer.IsoInstall(o); Core.Log(o.RealPs3 ? "완료. 한글 ISO와 재서명한 실행 파일을 PS3에서 사용하세요. PS3에 이미 설치된 게임 데이터(BLUS30761DATA)는 지워 주세요." : "완료. RPCS3에서 위의 _KOR.iso를 실행하세요."); });
             else Job(() => Installer.Folder(o));
         };
@@ -1230,6 +1241,20 @@ class MainForm : Form
             if (pc.Checked) Rpcs3Patch.Uninstall(rp.Text.Trim());
         });
         ext.Click += (s, e) => { if (!Core.IsIso(game.Text)) { Core.Log("먼저 게임 ISO를 지정해 주세요. (폴더 설치는 게임 폴더의 sc1/sc2/sc3.ppu.self를 RPCS3로 바로 복호화하면 됩니다.)"); return; } Job(() => Installer.ExtractSelfs(game.Text)); };
+    }
+    bool Confirm(string rpcs3)
+    {
+        string hdd;
+        try { hdd = Core.HddUsr(rpcs3); } catch { return true; } // 잘못된 폴더는 설치 단계에서 오류로 알려 줌
+        if (hdd != null) return true;
+        string why = string.IsNullOrEmpty(rpcs3)
+            ? "RPCS3 폴더를 지정하지 않았습니다.\r\n이미 RPCS3에서 이 게임을 실행해 본 적이 있다면 [취소]를 누르고 RPCS3 폴더를 지정해 주세요."
+            : "RPCS3에 아직 이 게임의 설치 데이터가 없습니다.";
+        return MessageBox.Show(this, why + "\r\n\r\n그대로 설치하면, 설치가 끝난 뒤 반드시\r\n" +
+            "  1) RPCS3에서 게임을 한 번 실행해 타이틀 화면까지 간 뒤 종료하고\r\n" +
+            "  2) 패처를 한 번 더 실행해야\r\n     (ISO 설치였다면 만들어진 _KOR.iso를 지정하면 빠르게 끝납니다)\r\n" +
+            "추가 자막(1편 훈련 전 국장실 대화 등)이 나옵니다.\r\n\r\n계속 설치할까요?",
+            Text, MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.OK;
     }
     static string Consent()
     {

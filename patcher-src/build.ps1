@@ -17,7 +17,7 @@ if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR "Microsoft.NET\Framewo
 if (-not (Test-Path $csc)) { throw "csc.exe 를 찾을 수 없습니다. .NET Framework 4.x 가 필요합니다." }
 
 function Compile([string]$exe, [string[]]$extra, [string]$define = "") {
-    $res = @("elfpatch.bin", "subs.txt.gz", "videosha.txt", "NanumGothicBold.ttf.gz", "rpcs3_patch.yml", "rpcs3_hashes.txt") + $extra
+    $res = @("elfpatch.bin", "subs.txt.gz", "videosha.txt", "NanumGothicBold.ttf.gz", "rpcs3_patch.yml", "rpcs3_hashes.txt", "sctkosub.exe") + $extra
     $cargs = @("/nologo", "/codepage:65001", "/target:winexe", "/optimize+", "/out:$exe",
         "/r:System.Drawing.dll", "/r:System.Windows.Forms.dll", "/r:System.Core.dll", "/r:System.IO.Compression.dll")
     if ($define -ne "") { $cargs += "/define:$define" }

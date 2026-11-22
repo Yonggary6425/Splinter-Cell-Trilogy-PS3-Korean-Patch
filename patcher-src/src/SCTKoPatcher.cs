@@ -336,20 +336,6 @@ static class Video
         public long VideoBytes() { long s = 0; for (int i = 0; i < Frames; i++) { int v, e, st; Frame(i, out v, out e, out st); s += e - v; } return s; }
     }
     static void LE32(byte[] b, int o, uint v) { BitConverter.GetBytes(v).CopyTo(b, o); }
-    // Keeps every audio track of the original and swaps in the new video packets.
-    static void Remux(Bink o, Bink v, string path)
-    {
-        if (o.Frames != v.Frames || v.N != 0 || o.W != v.W || o.H != v.H) throw new Exception("영상 프레임 정보가 맞지 않습니다.");
-        int n = (int)o.N, F = (int)o.Frames, hl = 44 + 12 * n + 4 * (F + 1); uint pos = (uint)hl, maxF = 0; var offs = new uint[F + 1];
-        for (int i = 0; i < F; i++) { int ov, oe, os, vv, ve, vs; o.Frame(i, out ov, out oe, out os); v.Frame(i, out vv, out ve, out vs); uint len = (uint)((ov - os) + (ve - vv)); offs[i] = pos | (uint)(v.Off[i] & 1); pos += len; if (len > maxF) maxF = len; }
-        offs[F] = pos; var h = new byte[hl]; Array.Copy(o.B, 0, h, 0, 4); LE32(h, 4, pos - 8); LE32(h, 8, (uint)F); LE32(h, 12, maxF); LE32(h, 16, (uint)F); LE32(h, 20, o.W); LE32(h, 24, o.H); LE32(h, 28, o.FpsN); LE32(h, 32, o.FpsD); LE32(h, 36, v.VFlags); LE32(h, 40, (uint)n);
-        Array.Copy(o.B, 44, h, 44, 12 * n); for (int i = 0; i <= F; i++) LE32(h, 44 + 12 * n + i * 4, offs[i]);
-        using (var f = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20))
-        {
-            f.Write(h, 0, hl);
-            for (int i = 0; i < F; i++) { int ov, oe, os, vv, ve, vs; o.Frame(i, out ov, out oe, out os); v.Frame(i, out vv, out ve, out vs); f.Write(o.B, os, ov - os); f.Write(v.B, vv, ve - vv); }
-        }
-    }
     public static void Run(string exe, string args, string cwd)
     {
         var p = new ProcessStartInfo(exe, args) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = cwd, RedirectStandardError = true, RedirectStandardOutput = true };
@@ -360,30 +346,67 @@ static class Video
             if (x.ExitCode != 0) throw new Exception(Path.GetFileName(exe) + " 오류 (" + x.ExitCode + "): " + err);
         }
     }
-    // Burns the Korean subtitles into one movie: ffmpeg draws them on PNG frames, RAD Video Tools encodes Bink 1, and the original audio is kept.
-    public static void Burn(Subs.Item it, string src, string output, string ffmpeg, string rad)
+    static Process Start(string exe, string args, string cwd, bool stdin, StringBuilder err)
+    {
+        var p = new ProcessStartInfo(exe, args) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = cwd, RedirectStandardError = true, RedirectStandardOutput = !stdin, RedirectStandardInput = stdin };
+        var x = Process.Start(p);
+        x.ErrorDataReceived += (s, e) => { if (e.Data != null) lock (err) { if (err.Length < 2000) err.AppendLine(e.Data); } };
+        x.BeginErrorReadLine();
+        return x;
+    }
+    static bool ReadFull(Stream s, byte[] b)
+    {
+        int n = 0; while (n < b.Length) { int r = s.Read(b, n, b.Length - n); if (r <= 0) return false; n += r; }
+        return true;
+    }
+    // Burns the Korean subtitles into one movie. ffmpeg decodes it twice (as is, and with the subtitles drawn) and the helper
+    // rewrites only the blocks that differ, so the movie keeps its original Bink revision, audio tracks and untouched frames.
+    public static void Burn(Subs.Item it, string src, string output, string ffmpeg)
     {
         var orig = new Bink(src);
-        long need = (long)orig.Frames * orig.W * orig.H * 2 + (300L << 20);
+        if (orig.B[3] < 'f' || orig.B[3] > 'i') throw new Exception("지원하지 않는 Bink 형식입니다: " + it.Rel);
+        int fs = (int)(orig.W * orig.H * 3 / 2), n = (int)orig.Frames;
         string tmp = Path.Combine(Path.GetTempPath(), "SCTKO_" + Guid.NewGuid().ToString("N"));
+        long need = new FileInfo(src).Length * 3 + (64L << 20);
         long free = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(tmp))).AvailableFreeSpace;
         if (free < need) throw new Exception("임시 폴더 드라이브 공간이 부족합니다 (" + (need >> 20) + "MB 필요).");
-        Directory.CreateDirectory(Path.Combine(tmp, "f"));
+        Directory.CreateDirectory(tmp);
+        Process a = null, b = null, h = null; var err = new StringBuilder();
         try
         {
             File.WriteAllText(Path.Combine(tmp, "s.ass"), it.Ass, new UTF8Encoding(false));
             File.WriteAllBytes(Path.Combine(tmp, "NanumGothicBold.ttf"), Core.Gunzip(Core.Res("NanumGothicBold.ttf.gz")));
+            File.WriteAllBytes(Path.Combine(tmp, "sctkosub.exe"), Core.Res("sctkosub.exe"));
             File.Copy(src, Path.Combine(tmp, "in.bik"));
-            Run(ffmpeg, "-v error -y -i in.bik -an -fps_mode passthrough -vf \"subtitles=s.ass:fontsdir=.\" -compression_level 1 f/f%05d.png", tmp);
-            int cnt = Directory.GetFiles(Path.Combine(tmp, "f"), "f*.png").Length;
-            if (cnt != orig.Frames) throw new Exception("프레임 수가 맞지 않습니다: " + cnt + " / " + orig.Frames);
-            long rate = (long)(orig.VideoBytes() * (double)orig.FpsN / orig.FpsD / orig.Frames);
-            string fps = ((double)orig.FpsN / orig.FpsD).ToString("0.###", CultureInfo.InvariantCulture);
-            Run(rad, "Bink \"" + Path.Combine(tmp, "f", "f?????.png") + "*1-" + cnt + "\" \"" + Path.Combine(tmp, "v.bik") + "\" /Bink1 /F" + fps + " /DataRate" + rate + " /NoSound /O /#", tmp);
-            if (!File.Exists(Path.Combine(tmp, "v.bik"))) throw new Exception("Bink 인코딩 결과가 없습니다.");
-            Remux(orig, new Bink(Path.Combine(tmp, "v.bik")), output);
+            const string dec = "-v error -i in.bik -an -fps_mode passthrough ", raw = "-f rawvideo -pix_fmt yuv420p -";
+            a = Start(ffmpeg, dec + raw, tmp, false, err);
+            b = Start(ffmpeg, dec + "-vf \"subtitles=s.ass:fontsdir=.\" " + raw, tmp, false, err);
+            h = Start(Path.Combine(tmp, "sctkosub.exe"), "in.bik out.bik", tmp, true, err);
+            Stream sa = a.StandardOutput.BaseStream, sb = b.StandardOutput.BaseStream, sh = h.StandardInput.BaseStream;
+            var buf = new byte[fs];
+            try
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    if (!ReadFull(sa, buf)) throw new Exception("프레임 수가 맞지 않습니다: " + i + " / " + n);
+                    sh.Write(buf, 0, fs);
+                    if (!ReadFull(sb, buf)) throw new Exception("프레임 수가 맞지 않습니다: " + i + " / " + n);
+                    sh.Write(buf, 0, fs);
+                }
+                sh.Close();
+            }
+            catch (Exception x) { Thread.Sleep(300); string e; lock (err) e = err.ToString().Trim(); throw new Exception("영상 자막 처리 실패: " + x.Message + (e.Length > 0 ? "\r\n" + e : "")); }
+            if (!h.WaitForExit(600000) || h.ExitCode != 0) { string e; lock (err) e = err.ToString().Trim(); throw new Exception("영상 자막 처리 실패 (" + (h.HasExited ? h.ExitCode.ToString() : "시간 초과") + ")" + (e.Length > 0 ? "\r\n" + e : "")); }
+            var res = Path.Combine(tmp, "out.bik");
+            var chk = new Bink(res);
+            if (chk.Frames != orig.Frames || chk.N != orig.N || chk.W != orig.W || chk.H != orig.H || chk.B[3] != orig.B[3]) throw new Exception("만들어진 영상의 정보가 원본과 다릅니다.");
+            File.Copy(res, output, true);
         }
-        finally { try { Directory.Delete(tmp, true); } catch { } }
+        finally
+        {
+            foreach (var p in new[] { a, b, h }) if (p != null) { try { if (!p.HasExited) p.Kill(); } catch { } try { p.WaitForExit(5000); p.Dispose(); } catch { } }
+            try { Directory.Delete(tmp, true); } catch { }
+        }
     }
 }
 
@@ -443,7 +466,7 @@ static class Installer
 {
     public class Options
     {
-        public string Game, Rpcs3, ElfDir, Ffmpeg, Rad; public bool Exe = true, RealPs3; public HashSet<int> VideoGames = new HashSet<int>();
+        public string Game, Rpcs3, ElfDir, Ffmpeg; public bool Exe = true, RealPs3; public HashSet<int> VideoGames = new HashSet<int>();
         public bool Video { get { return VideoGames.Count > 0; } }
     }
     static void Record(string usr, string kind, string rel)
@@ -545,14 +568,14 @@ static class Installer
             Rpcs3Patch.Install(o.Rpcs3);
         }
         if (hdd != null) { Data(hdd, pack, true); Core.Log("RPCS3 설치 데이터도 패치했습니다: " + hdd); }
-        if (o.Video) Tools.With(o.Ffmpeg, o.Rad, (ff, rad) => Videos(o, ff, rad, it =>
+        if (o.Video) Tools.With(o.Ffmpeg, ff => Videos(o, ff, it =>
         {
             var f = Path.Combine(usr, Core.Disk(it.Rel)); return File.Exists(f + ".orig") ? f + ".orig" : File.Exists(f) ? f : null;
         }, (it, file) => { var f = Path.Combine(usr, Core.Disk(it.Rel)); if (!File.Exists(f + ".orig")) File.Move(f, f + ".orig"); else File.Delete(f); File.Move(file, f); Record(usr, "M", it.Rel); }));
         Core.Log("설치가 끝났습니다." + (o.RealPs3 ? "" : " RPCS3에서 게임을 실행하세요."));
     }
 
-    static void Videos(Options o, string ff, string rad, Func<Subs.Item, string> source, Action<Subs.Item, string> done)
+    static void Videos(Options o, string ff, Func<Subs.Item, string> source, Action<Subs.Item, string> done)
     {
         var items = Subs.All().Where(x => o.VideoGames.Contains(x.Game)).ToList(); int i = 0;
         var sums = Encoding.ASCII.GetString(Core.Res("videosha.txt")).Split('\n').Where(l => l.Length > 64).ToDictionary(l => l.Substring(65).Trim(), l => l.Substring(0, 64));
@@ -563,7 +586,7 @@ static class Installer
             string want; if (sums.TryGetValue(it.Rel, out want) && Core.ShaFile(src) != want) { Core.Log("[" + i + "/" + items.Count + "] 원본 영상이 아니라 건너뜀 (이미 자막이 들어갔을 수 있음): " + it.Rel); continue; }
             Core.Log("[" + i + "/" + items.Count + "] 자막 입히는 중: " + it.Rel);
             var outp = Path.Combine(Path.GetTempPath(), "SCTKO_" + Guid.NewGuid().ToString("N") + ".bik");
-            try { Video.Burn(it, src, outp, ff, rad); done(it, outp); }
+            try { Video.Burn(it, src, outp, ff); done(it, outp); }
             finally { if (File.Exists(outp)) File.Delete(outp); }
         }
         Core.Log("영상 자막 작업 완료");
@@ -639,7 +662,7 @@ static class Installer
                         }
                 }
                 if (done == 0 && !o.Video) throw new Exception("이미 한글 패치가 적용된 ISO입니다.");
-                if (o.Video) Tools.With(o.Ffmpeg, o.Rad, (ff, rad) => Videos(o, ff, rad, it =>
+                if (o.Video) Tools.With(o.Ffmpeg, ff => Videos(o, ff, it =>
                 {
                     var n = node(it.Rel); if (n == null) return null;
                     var f = Path.Combine(work, "v" + (k++) + ".bik"); using (var s = File.Create(f)) iso.Copy(n, s); return f;
@@ -821,8 +844,6 @@ class Iso : IDisposable
 static class Tools
 {
     const string FfmpegUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip";
-    const string RadUrl = "https://www.radgametools.com/down/Bink/RADTools.7z";
-    const string RadPassword = "RAD"; // published on radgametools.com/bnkdown.htm
 
     static void Get(string url, string path)
     {
@@ -867,35 +888,19 @@ static class Tools
         if (!FfmpegOk(exe)) throw new Exception("내려받은 ffmpeg에 자막 기능이 없습니다.");
         return exe;
     }
-    static string GetRad(string dir)
-    {
-        string arc = Path.Combine(dir, "RADTools.7z"), setup = Path.Combine(dir, "radtools.exe"), inst = Path.Combine(dir, "rad");
-        Core.Log("RAD Video Tools 내려받는 중 (radgametools.com, 약 1.2MB)...");
-        Get(RadUrl, arc);
-        File.WriteAllBytes(setup, SevenZip.ExtractSingle(File.ReadAllBytes(arc), RadPassword));
-        Trust.Require(setup, "Epic Games", "RAD Game Tools");
-        Directory.CreateDirectory(inst);
-        // RunAsInvoker: unpack into temp as the normal user, with no UAC prompt and no system-wide install
-        var p = new ProcessStartInfo(setup, "/S /D=" + inst) { UseShellExecute = false, CreateNoWindow = true }; p.EnvironmentVariables["__COMPAT_LAYER"] = "RunAsInvoker";
-        using (var x = Process.Start(p)) { if (!x.WaitForExit(180000)) { x.Kill(); throw new Exception("RAD Video Tools 압축 해제가 끝나지 않습니다."); } }
-        var rad = Path.Combine(inst, "radvideo64.exe");
-        if (!File.Exists(rad)) throw new Exception("radvideo64.exe를 찾을 수 없습니다.");
-        Trust.Require(rad, "Epic Games", "RAD Game Tools");
-        return rad;
-    }
-    // ffmpeg/rad: an existing tool path, or null to fetch that tool for the duration of the job
-    public static void With(string ffmpeg, string rad, Action<string, string> job)
+    // ffmpeg: an existing tool path, or null to fetch it for the duration of the job
+    public static void With(string ffmpeg, Action<string> job)
     {
         string tmp = null;
         try
         {
-            if (ffmpeg == null || rad == null)
+            if (ffmpeg == null)
             {
                 tmp = Path.Combine(Path.GetTempPath(), "SCTKO_tools_" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(tmp);
-                try { if (ffmpeg == null) ffmpeg = GetFfmpeg(tmp); if (rad == null) rad = GetRad(tmp); }
-                catch (Exception x) { throw new Exception("도구 자동 다운로드 실패: " + x.Message + "\r\n각 공식 사이트에서 직접 받아 경로를 지정하면 계속할 수 있습니다."); }
+                try { ffmpeg = GetFfmpeg(tmp); }
+                catch (Exception x) { throw new Exception("ffmpeg 자동 다운로드 실패: " + x.Message + "\r\n공식 사이트에서 직접 받아 경로를 지정하면 계속할 수 있습니다."); }
             }
-            job(ffmpeg, rad);
+            job(ffmpeg);
         }
         finally { if (tmp != null) try { Directory.Delete(tmp, true); Core.Log("임시 도구 삭제 완료"); } catch { Core.Log("주의: 임시 폴더를 지우지 못했습니다: " + tmp); } }
     }
@@ -1106,7 +1111,7 @@ static class SevenZip
 
 class MainForm : Form
 {
-    TextBox game = Box(), rp = Box(), elfDir = Box(), ff = Box(), rad = Box(), log = new TextBox();
+    TextBox game = Box(), rp = Box(), elfDir = Box(), ff = Box(), log = new TextBox();
     RadioButton pc = new RadioButton { Text = "PC (RPCS3)", Checked = true, AutoSize = true }, hw = new RadioButton { Text = "PS3 실기 (커스텀 펌웨어)", AutoSize = true };
     CheckBox exe = new CheckBox { Text = "실행 파일(ELF) 패치 (필수 권장)", Checked = true, AutoSize = true };
     CheckBox vid = new CheckBox { Text = "동영상에 한글 자막 입히기 (선택, 인터넷 필요, 오래 걸림)", AutoSize = true };
@@ -1139,8 +1144,8 @@ class MainForm : Form
         elfLabel.Left = 135; elfLabel.Top = y - 6; elfLabel.AutoSize = true; elfLabel.ForeColor = Color.Firebrick; Controls.Add(elfLabel); if (Core.Yml) y += 18;
         vid.Left = 135; vid.Top = y; Controls.Add(vid); y += 26;
         v1.Left = 155; v1.Top = y; v2.Left = 225; v2.Top = y; v3.Left = 395; v3.Top = y; Controls.AddRange(new Control[] { v1, v2, v3 }); y += 28;
-        Row("ffmpeg.exe", ff, true, "ffmpeg|ffmpeg.exe"); Row("radvideo64.exe", rad, true, "RAD Video Tools|radvideo64.exe");
-        Controls.Add(new Label { Text = "도구 경로를 비워 두면 공식 사이트에서 임시 폴더로 자동으로 받아 쓰고, 끝나면 지웁니다.", Left = 135, Top = y - 6, AutoSize = true, ForeColor = Color.DimGray }); y += 22;
+        Row("ffmpeg.exe", ff, true, "ffmpeg|ffmpeg.exe");
+        Controls.Add(new Label { Text = "경로를 비워 두면 공식 사이트에서 임시 폴더로 자동으로 받아 쓰고, 끝나면 지웁니다.", Left = 135, Top = y - 6, AutoSize = true, ForeColor = Color.DimGray }); y += 22;
         go.Left = 135; go.Top = y; undo.Left = 255; undo.Top = y; ext.Left = 375; ext.Top = y; Controls.AddRange(new Control[] { go, undo, ext }); y += 42;
         log.Multiline = true; log.ReadOnly = true; log.ScrollBars = ScrollBars.Vertical; log.Left = 12; log.Top = y; log.Width = 660; log.Height = 600 - y; Controls.Add(log);
         Core.Log = s =>
@@ -1151,12 +1156,12 @@ class MainForm : Form
         if (Core.Yml) { exe.Text = "실행 파일 한글 패치 (PC: RPCS3 게임 패치로 적용, 복호화 불필요)"; elfLabel.Text = "PS3 실기 전용: 실기는 복호화한 .elf로 패치한 뒤 재서명이 필요합니다."; }
         Action sync = () =>
         {
-            foreach (var c in new Control[] { v1, v2, v3, ff, rad }) c.Enabled = vid.Checked;
+            foreach (var c in new Control[] { v1, v2, v3, ff }) c.Enabled = vid.Checked;
             elfDir.Enabled = ext.Enabled = exe.Checked && (!Core.Yml || hw.Checked); rp.Enabled = pc.Checked;
         };
         vid.CheckedChanged += (s, e) => sync(); exe.CheckedChanged += (s, e) => sync(); pc.CheckedChanged += (s, e) => sync(); sync();
         Func<string, string> onPath = n => (Environment.GetEnvironmentVariable("PATH") ?? "").Split(';').Select(d => { try { return Path.Combine(d.Trim(), n); } catch { return ""; } }).FirstOrDefault(File.Exists) ?? "";
-        ff.Text = onPath("ffmpeg.exe"); rad.Text = onPath("radvideo64.exe");
+        ff.Text = onPath("ffmpeg.exe");
         try { Core.Log("패치 데이터: " + Pack.Load().Count + "개 파일 / 영상 자막: " + Subs.All().Count + "개"); } catch (Exception x) { Core.Log("오류: " + x.Message); }
         go.Click += (s, e) =>
         {
@@ -1164,9 +1169,9 @@ class MainForm : Form
             if (vid.Checked) { if (v1.Checked) o.VideoGames.Add(1); if (v2.Checked) o.VideoGames.Add(2); if (v3.Checked) o.VideoGames.Add(3); }
             if (o.Video)
             {
-                bool getFf = !Tools.FfmpegOk(ff.Text), getRad = !File.Exists(rad.Text);
-                if ((getFf || getRad) && MessageBox.Show(this, Consent(getFf, getRad), Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes) { Core.Log("취소했습니다. 도구 경로를 직접 지정하거나 영상 자막 체크를 해제해 주세요."); return; }
-                o.Ffmpeg = getFf ? null : ff.Text; o.Rad = getRad ? null : rad.Text;
+                bool getFf = !Tools.FfmpegOk(ff.Text);
+                if (getFf && MessageBox.Show(this, Consent(), Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes) { Core.Log("취소했습니다. ffmpeg 경로를 직접 지정하거나 영상 자막 체크를 해제해 주세요."); return; }
+                o.Ffmpeg = getFf ? null : ff.Text;
             }
             if (Core.IsIso(o.Game)) Job(() => { Installer.IsoInstall(o); Core.Log(o.RealPs3 ? "완료. 한글 ISO와 재서명한 실행 파일을 PS3에서 사용하세요. PS3에 이미 설치된 게임 데이터(BLUS30761DATA)는 지워 주세요." : "완료. RPCS3에서 위의 _KOR.iso를 실행하세요."); });
             else Job(() => Installer.Folder(o));
@@ -1179,13 +1184,9 @@ class MainForm : Form
         });
         ext.Click += (s, e) => { if (!Core.IsIso(game.Text)) { Core.Log("먼저 게임 ISO를 지정해 주세요. (폴더 설치는 게임 폴더의 sc1/sc2/sc3.ppu.self를 RPCS3로 바로 복호화하면 됩니다.)"); return; } Job(() => Installer.ExtractSelfs(game.Text)); };
     }
-    static string Consent(bool getFf, bool getRad)
+    static string Consent()
     {
-        var s = new StringBuilder("영상 자막을 만들려면 아래 무료 도구가 필요합니다.\r\n공식 사이트에서 받아 임시 폴더에서 사용하고, 작업이 끝나면 지웁니다.\r\n\r\n");
-        if (getFf) s.Append("• ffmpeg (gyan.dev, 약 100MB, GPL 라이선스)\r\n");
-        if (getRad) s.Append("• RAD Video Tools (radgametools.com, 약 1.2MB)\r\n");
-        if (getRad) s.Append("\r\nRAD Video Tools 사용권의 주요 제한:\r\n재배포 금지, 대여·재판매 금지, 수정·역공학 금지, 허가 없는 상업적 사용 금지\r\n");
-        return s.Append("\r\n위 내용에 동의하고 내려받을까요?").ToString();
+        return "영상 자막을 만들려면 무료 도구 ffmpeg가 필요합니다.\r\n공식 배포처(gyan.dev, 약 100MB, GPL 라이선스)에서 받아 임시 폴더에서 사용하고, 작업이 끝나면 지웁니다.\r\n\r\n내려받을까요?";
     }
     void Job(Action a)
     {
@@ -1200,7 +1201,7 @@ static class Program
     static int Main(string[] a)
     {
         if (a.Length == 0) { Application.EnableVisualStyles(); Application.Run(new MainForm()); return 0; }
-        // --game P [--rpcs3 D] [--elf-dir D] [--no-exe] [--ps3] [--video 123] [--ffmpeg F] [--rad F] [--uninstall] [--extract-self] [--log F]
+        // --game P [--rpcs3 D] [--elf-dir D] [--no-exe] [--ps3] [--video 123] [--ffmpeg F] [--uninstall] [--extract-self] [--log F]
         // --make-pack --patched D [--orig ISO|D] --out F
         var o = new Dictionary<string, string>(); var flags = new[] { "--no-exe", "--ps3", "--uninstall", "--extract-self", "--make-pack" };
         for (int i = 0; i < a.Length; i++) { if (flags.Contains(a[i])) o[a[i]] = "1"; else if (i + 1 < a.Length) o[a[i]] = a[++i]; }
@@ -1216,7 +1217,7 @@ static class Program
                 if (!Core.IsIso(G("--game")) && G("--game") != null) Installer.Uninstall(Core.UsrDir(G("--game")));
                 var h = Core.HddUsr(G("--rpcs3")); if (h != null) Installer.Uninstall(h); Rpcs3Patch.Uninstall(G("--rpcs3")); return 0;
             }
-            var opt = new Installer.Options { Game = G("--game"), Rpcs3 = G("--rpcs3"), ElfDir = G("--elf-dir"), Exe = G("--no-exe") == null, RealPs3 = G("--ps3") != null, Ffmpeg = G("--ffmpeg"), Rad = G("--rad") };
+            var opt = new Installer.Options { Game = G("--game"), Rpcs3 = G("--rpcs3"), ElfDir = G("--elf-dir"), Exe = G("--no-exe") == null, RealPs3 = G("--ps3") != null, Ffmpeg = G("--ffmpeg") };
             foreach (var c in G("--video") ?? "") if (c >= '1' && c <= '3') opt.VideoGames.Add(c - '0');
             if (Core.IsIso(opt.Game)) Installer.IsoInstall(opt); else Installer.Folder(opt);
             w.WriteLine("OK"); return 0;

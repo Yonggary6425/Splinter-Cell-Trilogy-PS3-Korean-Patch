@@ -9,4 +9,5 @@
 
 - 동영상 자막 글꼴은 **나눔고딕**(© NAVER Corporation)입니다. SIL Open Font License 1.1에 따라 배포됩니다. https://openfontlicense.org
 - 타이틀 화면 문구는 **Orbitron**(SIL Open Font License 1.1) 글꼴로 만들었습니다.
-- 동영상 자막 기능은 ffmpeg와 RAD Video Tools를 각 공식 사이트에서 내려받아 사용하며, 패처에 포함하지 않습니다.
+- 동영상 자막 기능은 ffmpeg를 공식 배포처에서 내려받아 사용하며, ffmpeg는 패처에 포함하지 않습니다.
+- 패처에 들어 있는 자막 삽입 도구(`sctkosub.exe`, 소스 `patcher-src/helper/sctkosub.c`)는 FFmpeg의 Bink 표 데이터(`binkdata.h`, © Konstantin Shishkov, LGPL 2.1 이상)를 사용합니다. 이 도구의 소스는 같은 조건으로 공개합니다.

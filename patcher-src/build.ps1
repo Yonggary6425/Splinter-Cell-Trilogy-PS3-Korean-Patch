@@ -50,6 +50,7 @@ if ($Original -ne "") { $a += @("--orig", "`"$Original`"") }
 $p = Start-Process -FilePath $stage -ArgumentList $a -Wait -PassThru
 Get-Content -LiteralPath $log -Encoding UTF8 | Write-Host
 if ($p.ExitCode -ne 0) { throw "패치 데이터 생성 실패 (make-pack.log 확인)" }
+if ((Get-Item -LiteralPath $pack).Length -lt 1MB) { throw "패치 데이터가 너무 작습니다. 비교한 폴더가 한글화된 게임 폴더가 맞는지 확인하세요: $Patched" }
 
 Write-Host "[3/3] 최종 패처 컴파일..." -ForegroundColor Cyan
 Copy-Item -LiteralPath $pack -Destination (Join-Path $src "data.pack") -Force
